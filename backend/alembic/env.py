@@ -1,3 +1,4 @@
+from uuid import uuid4
 import asyncio
 from logging.config import fileConfig
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -25,9 +26,14 @@ def do_run_migrations(connection):
 
 async def run_async_migrations():
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section),
+        config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
+    },
     )
 
     async with connectable.connect() as connection:
