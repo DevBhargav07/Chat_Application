@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useLayoutEffect, Fragment, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Clock, MessageCircle, Send } from "lucide-react";
 import Avatar from "./Avatar";
 import { dayLabel, formatTime } from "./chatUtils";
@@ -17,6 +17,30 @@ export default function ChatWindow({
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const lastConvId = useRef(null);
+  const listRef = useRef(null);
+  const prevScrollHeightRef = useRef(0);
+  const isPrependingRef = useRef(false);
+
+
+  const handleScroll = async () => {
+    const el = listRef.current;
+    if (!el || el.scrollTop > 80 || !hasMore || loadingOlder) return;
+
+    prevScrollHeightRef.current = el.scrollHeight;
+    isPrependingRef.current = true;
+    await loadOlder();
+  }
+
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+
+    if (isPrependingRef.current) {
+      // Keep the user's viewport anchored to the exact message they were reading
+      el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
+      isPrependingRef.current = false;
+    }
+  }, [messages]);
 
   // Re-check every 30s so messages vanish from the screen when they expire,
   // without needing a refresh.
