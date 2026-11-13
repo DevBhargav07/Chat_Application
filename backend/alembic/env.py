@@ -9,6 +9,19 @@ from alembic import context
 from app.config import settings
 from app.database import Base  # Adjust path to your Base model
 
+from app.models import (
+    Conversation,
+    Group,
+    GroupPermission,
+    User,
+    UserGroup,
+    Region,
+    UserPermission,
+    UserRegion,
+    Message,
+    ConversationMember
+)
+
 config = context.config
 
 # Force Alembic to use your exact DATABASE_URL setting
