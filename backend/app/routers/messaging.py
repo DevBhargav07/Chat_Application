@@ -15,6 +15,8 @@ from app.models import ( Conversation, ConversationMember, Message, User, UserRe
 from app.chat_manager import MESSAGE_TTL, manager
 from app.database import get_async_session, AsyncSessionLocal
 from app.schemas import ChatUserOut, MessageOut, ConversationOut, OpenDirectRequest
+from app.paginations import CursorPage
+from app.services.message_services import get_conversation_messages
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -209,6 +211,28 @@ async def mark_read(
     member.last_read_at = _now()
     await session.commit()
 
+@router.get("/{conversation_id}/messages", response_model=CursorPage[MessageOut])
+async def list_messages(
+    conversation_id: int,
+    db: session_dependency,
+    limit: int = Query(default=30, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+    current_user=Depends(IsAuthenticated()),
+):
+    await _require_member(db, conversation_id, current_user.id)
+
+    try:
+        return await get_conversation_messages(
+            db=db,
+            conversation_id=conversation_id,
+            limit=limit,
+            cursor=cursor,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 # ----------------------------- WebSocket -----------------------------------
 
