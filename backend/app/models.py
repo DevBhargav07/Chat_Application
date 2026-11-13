@@ -1,7 +1,7 @@
 import hashlib
 import enum
 
-from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Enum as SAEnum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Integer, ForeignKey, DateTime, func, Text
 from datetime import datetime
@@ -174,3 +174,13 @@ class Message(Base):
     # Stored per message, so a future "custom timer" feature is just a different
     # value here, no schema change needed.
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_messages_conv_created_id",
+            "conversation_id",
+            "sent_at",
+            "id",
+        ),
+        Index("ix_messages_expires_at", "expires_at"),
+    )
