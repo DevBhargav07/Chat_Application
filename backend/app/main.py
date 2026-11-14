@@ -1,4 +1,4 @@
-import os
+import logging
 import asyncio
 from fastapi import FastAPI
 from app.routers import users, chat, messaging
@@ -10,8 +10,10 @@ from app.database import engine, Base
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.config import settings
+from app import cache
 
 origins = [o.strip().rstrip("/") for o in settings.cors_origins.split(",") if o.strip()]
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +24,9 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as session:
         await ensure_crud_permissions(session)
         await ensure_default_groups(session)
+
+    status = "connected" if await cache.ping() else "off (no REDIS, or unreachable)"
+    logging.getLogger("uvicorn.error").info("Redis cache: %s", status)
 
     purge_task = asyncio.create_task(purge_expired_messages())
     yield
