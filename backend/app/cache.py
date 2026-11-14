@@ -129,3 +129,33 @@ async def add_message(message: dict) -> None:
         await pipe.execute()
     except Exception:
         _pause("write failed")
+
+USER_CACHE_TTL = 300 # 5 minutes
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models import User
+from sqlalchemy import select
+
+async def get_user_cache_or_db(user_id: int, redis, db: AsyncSession):
+    cache_key = f"user:{user_id}"
+
+    # try fetch from cache first
+    cached = await redis.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    # cache missed: calling db
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+
+    # serialize user data
+    user_data = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser
+    }
+    await redis.set(cache_key, json.dumps(user_data), ex=USER_CACHE_TTL)
+    return user_data
