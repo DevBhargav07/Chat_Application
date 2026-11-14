@@ -6,7 +6,7 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from fastapi import APIRouter
@@ -17,6 +17,7 @@ from app.models import User, Group, Permission
 
 # load settings
 from app.config import settings
+from app import cache
 
 SECRET_KEY = settings.secret_key  # Replace with your actual secret key
 ALGORITHM = "HS256"
@@ -127,7 +128,7 @@ async def login_user(
     user_details = (
         select(User)
         .options(selectinload(User.groups).selectinload(Group.permissions))
-        .where(User.email == form_data.username)  # here username is email
+        .where(or_(User.email == form_data.username, User.username == form_data.username))
     )
     user = await session.scalar(user_details)
     if not user or not user.verify_password(form_data.password):
@@ -150,6 +151,18 @@ async def login_user(
             }, 
         expires_delta=access_token_expires,
     )
+    await cache.unrevoke_user(user.id)
+    await cache.set_user_cached(
+        user.id,
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_active": user.is_active,
+            "is_superuser": user.is_superuser,
+        },
+    )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -159,3 +172,16 @@ async def login_user(
         "permissions": permissions,
         "is_superuser": user.is_superuser
     }
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_user(
+    token: str = Depends(oauth2_scheme),
+):
+    """Revoke user session in Redis so all active tabs/devices are invalidated."""
+    try:
+        payload = decode_access_token(token)
+        user_id = int(payload.get("sub"))
+        await cache.revoke_user(user_id)
+    except Exception:
+        pass

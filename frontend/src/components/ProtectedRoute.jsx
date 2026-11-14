@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 // Wrap any page that should only be visible to logged-in users
@@ -9,8 +9,16 @@ export default function ProtectedRoute({ children }) {
   if (!isAuthenticated) {
     // Remember where they were trying to go (e.g. /users) in route "state".
     // Login.jsx reads this back after a successful login.
-    return <Navigate to="/" state={{ from: location.pathname }} replace />;
+    const cleanPath = location.pathname.replace(/^\//, "");
+    const nextValue = `${cleanPath}${location.search}` || "dashboard";
+
+    return (
+      <Navigate
+        to={`/?next=${encodeURIComponent(nextValue)}`}
+        replace
+      />
+    );  
   }
 
-  return children;
+  return children ? children : <Outlet />;
 }

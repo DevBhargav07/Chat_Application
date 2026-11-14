@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { Link, useNavigate, useLocation, Navigate, useSearchParams } from "react-router-dom";
+import { getSafeNextUrl } from "@/utils/redirect";
 import { toast } from "sonner";
 import { Eye, EyeOff, LogIn, Moon, Sun } from "lucide-react";
 import { loginUser } from "../api/auth";
@@ -14,13 +15,14 @@ export default function Login() {
   const { login, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const location = useLocation();
 
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  const redirectTo = getSafeNextUrl(searchParams, location.state?.from || "/dashboard");
 
-  const redirectTo = location.state?.from || "/dashboard";
+  if (isAuthenticated) {
+    return <Navigate to={redirectTo} replace />;
+  }
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -50,7 +52,8 @@ export default function Login() {
       });
 
       toast.success("Logged in successfully!");
-      navigate(redirectTo, { replace: true });
+      const target = getSafeNextUrl(searchParams, location.state?.from || "/dashboard");
+      navigate(target, { replace: true });
     } catch (error) {
       const message =
         error.response?.data?.detail || "Invalid email or password";

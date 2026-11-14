@@ -251,8 +251,15 @@ async def list_messages(
 ):
     await _require_member(db, conversation_id, current_user.id)
 
+    # 1. On initial load, try fast Redis cache first
+    if cursor is None:
+        cached = await cache.get_first_page(conversation_id, limit)
+        if cached is not None:
+            return cached
+
+    # 2. Cache miss or pagination: query database
     try:
-        return await get_conversation_messages(
+        page = await get_conversation_messages(
             db=db,
             conversation_id=conversation_id,
             limit=limit,
@@ -263,6 +270,25 @@ async def list_messages(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+    # 3. Populate cache if this was initial load
+    if cursor is None and page.items:
+        now = datetime.now(timezone.utc)
+        newest_first = [
+            {
+                "id": m.id,
+                "conversation_id": m.conversation_id,
+                "sender_id": m.sender_id,
+                "content": m.content,
+                "sent_at": m.sent_at.isoformat(),
+                "expires_at": m.expires_at.isoformat() if m.expires_at else None,
+            }
+            for m in reversed(page.items)
+            if m.expires_at is None or m.expires_at > now
+        ]
+        await cache.populate(conversation_id, newest_first)
+
+    return page
 
 # ----------------------------- WebSocket -----------------------------------
 

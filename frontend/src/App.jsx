@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useSearchParams } from "react-router-dom";
 import { Toaster } from "sonner";
 import { useState } from "react";
 
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { getSafeNextUrl } from "./utils/redirect";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 
@@ -36,9 +37,27 @@ function AppLayout({ children }) {
           onMobileClose={() => setMobileNavOpen(false)}
         />
         <main className="app-main">{children}</main>
+        <Outlet />
       </div>
     </div>
   );
+}
+
+function PublicOnlyRoute({ children }){
+  const { isAuthenticated } = useAuth();
+  const [searchParams] = useSearchParams();
+  if (isAuthenticated) {
+    const target = getSafeNextUrl(searchParams, "/dashboard");
+    return <Navigate to={target} replace/>;
+  }
+  return children;
+}
+
+function FallbackRoute() {
+  const { isAuthenticated } = useAuth();
+  // Logged in & unknown URL -> 404 NotFound (inside layout or standalone)
+  // Logged out & unknown URL -> block and send to /login (replace history so Back won't revisit)
+  return isAuthenticated ? <NotFound /> : <Navigate to="/login" replace />;
 }
 
 function App() {
@@ -47,11 +66,11 @@ function App() {
       <ThemeProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Login />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signin" element={<Login />} />
-            <Route path="/signup" element={<Register />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+            <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+            <Route path="/signin" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+            <Route path="/signup" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
+            <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
 
             <Route
               path="/dashboard"
@@ -161,7 +180,7 @@ function App() {
             />
 
             {/* Catch-all: any unmatched URL shows the 404 page */}
-            <Route path="*" element={<NotFound />} />
+            <Route path="*" element={<FallbackRoute />} />
           </Routes>
         </BrowserRouter>
 
