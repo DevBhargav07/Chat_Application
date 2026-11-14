@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "python-jose>=3.4.0",
     "python-multipart>=0.0.20",
+    "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.0.52",
     "typing-extensions>=4.13.2",
     "uvicorn[standard]>=0.33.0",
