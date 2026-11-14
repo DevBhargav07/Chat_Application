@@ -97,7 +97,7 @@ export default function Register() {
 
       <form onSubmit={handleSubmit} className="auth-card">
         <div className="auth-header">
-          <div className="auth-brand-badge">MA</div>
+          {/* <div className="auth-brand-badge">MA</div> */}
           <h1 className="auth-title">Create an account</h1>
           <p className="auth-subtitle">Get started with MyApp in a few seconds</p>
         </div>
@@ -177,16 +177,17 @@ export default function Register() {
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="auth-btn">
+          {/* <button type="submit" disabled={loading} className="auth-btn">
             <UserPlus size={16} />
             {loading ? "Creating account..." : "Create account"}
-          </button>
+          </button> */}
+          {/* <span className="bg-blue-300 rounded center">Registration is Stopped</span> */}
         </div>
 
-        <p className="auth-footer">
+        {/* <p className="auth-footer">
           Already have an account?
           <Link to="/login">Sign in</Link>
-        </p>
+        </p> */}
       </form>
     </div>
   );
