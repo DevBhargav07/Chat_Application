@@ -23,6 +23,10 @@ export const registerUser = (username, email, password) => {
   return api.post("/auth/register", { username, email, password });
 };
 
+export const logoutUser = () => {
+  return api.post("/auth/logout").catch(() => {});
+};
+
 // Fetches the list of all users. Requires a valid JWT — the axios
 // interceptor in ./axios.js attaches it automatically.
 // Expected response: an array like
