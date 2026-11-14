@@ -1,11 +1,22 @@
+import { SkipBack } from "lucide-react";
 import { createContext, useContext, useState, useEffect } from "react";
 
 
-// Decodes a JWT's payload without needing any library.
-// Returns null if the token is malformed.
+// Decodes a JWT's payload safely across all browsers without external dependencies.
+// Handles URL-safe base64 (- and _), missing padding, and UTF-8 characters.
 function decodeJwt(token) {
   try {
-    return JSON.parse(atob(token.split(".")[1]));
+    if (!token || typeof token !== "string") return null;
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) {
+      base64 += "=";
+    }
+    const binaryStr = atob(base64);
+    const bytes = Uint8Array.from(binaryStr, (c) => c.charCodeAt(0));
+    const decoded = new TextDecoder().decode(bytes);
+    return JSON.parse(decoded);
   } catch {
     return null;
   }
@@ -40,17 +51,17 @@ export function AuthProvider({ children }) {
   );
 
 
-  const isAuthenticated = !!accessToken;
+  const isAuthenticated = !!accessToken || !!localStorage.getItem("access_token");
 
   // Called after a successful login
   const login = ({ access, refresh, username: uname, permissions: perms, groups: grps, user_id, is_superuser }) => {
-    localStorage.setItem("access_token", access);
     if (refresh) localStorage.setItem("refresh_token", refresh);
     if (uname) localStorage.setItem("username", uname);
     if (user_id) localStorage.setItem("user_id", user_id);
     localStorage.setItem("permissions", JSON.stringify(perms || []));
     localStorage.setItem("groups", JSON.stringify(grps || []));
     localStorage.setItem("is_superuser", String(!!is_superuser));
+    localStorage.setItem("access_token", access);
 
     setAccessToken(access);
     setUsername(uname || "");
@@ -61,15 +72,24 @@ export function AuthProvider({ children }) {
   }
 
   // Called on logout, or when a refresh attempt fails
-  const logout = () => {
+  const logout = ({ skipBackend = false } = {}) => {
+    // Notify backend to revoke session in Redis
+    if (!localStorage.getItem("access_token") && !accessToken) return;
+
+    if (!skipBackend){
+      import("../api/auth").then(({ logoutUser }) => logoutUser?.()).catch(() => {});
+    }
+
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("username");
+    localStorage.removeItem("user_id");
     localStorage.removeItem("permissions");
     localStorage.removeItem("groups");
     localStorage.removeItem("is_superuser");
     setAccessToken(null);
     setUsername("");
+    setUserId(null);
     setPermissions([]);
     setGroups([]);
     setIsSuperuser(false);
@@ -79,7 +99,8 @@ export function AuthProvider({ children }) {
   // without needing to log in again. Call this after an admin changes
   // someone's groups, or periodically, to keep permissions fresh.
   const refreshPermissions = async () => {
-    if (!accessToken) return;
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
     try {
       // Dynamic import avoids a circular import between AuthContext and api/auth.js
       const { getMyProfile } = await import("../api/auth");
@@ -88,13 +109,29 @@ export function AuthProvider({ children }) {
       const grps = response.data.groups || [];
       const superuser = !!response.data.is_superuser;
 
-      localStorage.setItem("permissions", JSON.stringify(perms));
-      localStorage.setItem("groups", JSON.stringify(grps));
-      localStorage.setItem("is_superuser", String(superuser));
-      setPermissions(perms);
-      setGroups(grps);
-      setIsSuperuser(superuser);
-    } catch {
+
+      setPermissions((prev) => {
+        if(JSON.stringify(prev) === JSON.stringify(perms)) return prev;
+        localStorage.setItem("permissions", JSON.stringify(perms));
+        return perms;
+      });
+
+      setGroups((prev) => {
+        if (JSON.stringify(prev) == JSON.stringify(grps)) return prev;
+        localStorage.setItem("groups", JSON.stringify(grps));
+        return grps;
+      });
+
+      setIsSuperuser((prev) => {
+        if (prev == superuser) return prev;
+        localStorage.setItem("is_superuser", superuser);
+        return superuser;
+      })
+
+    } catch (err) {
+      if (err.response?.status == 401){
+        logout({ skipBackend: true });
+      }
       // Silently ignore — if this fails, the user just keeps their
       // last-known permissions until the next successful refresh.
     }
@@ -104,44 +141,83 @@ export function AuthProvider({ children }) {
   const hasGroup = (groupName) => groups.includes(groupName);
 
   // Keep multiple tabs in sync (optional nice-to-have)
+  // useEffect(() => {
+  //   const syncLogout = (e) => {
+  //     if (e.key === "access_token" && !e.newValue) {
+  //       setAccessToken(null);
+  //       setUsername("");
+  //       setPermissions([]);
+  //       setGroups([]);
+  //     }
+  //   };
+  //   window.addEventListener("storage", syncLogout);
+  //   return () => window.removeEventListener("storage", syncLogout);
+  // }, []);
+  // AuthContext.jsx — replace the sync effect with this
   useEffect(() => {
-    const syncLogout = (e) => {
-      if (e.key === "access_token" && !e.newValue) {
-        setAccessToken(null);
-        setUsername("");
-        setPermissions([]);
-        setGroups([]);
+    const syncFromStorage = (e) => {
+      // "access_token" changed in another tab — re-read everything
+      if (e.key === "access_token") {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          // logged out (or deleted) in another tab
+          setAccessToken(null);
+          setUsername("");
+          setUserId(null);
+          setPermissions([]);
+          setGroups([]);
+          setIsSuperuser(false);
+          // ProtectedRoute sees isAuthenticated=false → redirects, no refresh
+        } else {
+          // logged in in another tab — pick up the new session
+          setAccessToken(token);
+          setUsername(localStorage.getItem("username") || "");
+          setUserId(localStorage.getItem("user_id") || null);
+          setPermissions(JSON.parse(localStorage.getItem("permissions") || "[]"));
+          setGroups(JSON.parse(localStorage.getItem("groups") || "[]"));
+          setIsSuperuser(localStorage.getItem("is_superuser") === "true");
+        }
       }
     };
-    window.addEventListener("storage", syncLogout);
-    return () => window.removeEventListener("storage", syncLogout);
+    const handleAuthLogout = () => {
+      logout({ skipBackend: true });
+    };
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener("auth:logout", handleAuthLogout);
+    return () => {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener("auth:logout", handleAuthLogout);
+    };
   }, []);
   useEffect(() => {
     if (!accessToken) return;
 
-    const onFocus= () => refreshPermissions();
-    window.addEventListener("focus", onFocus);
-
-    const interval = setInterval(refreshPermissions, 2 * 60 * 1000);
-
-
-
-
     const payload = decodeJwt(accessToken);
-    if (!payload?.exp) return;
-
-    const expiresAtMs = payload.exp * 1000;
-    const msUntilExpiry = expiresAtMs - Date.now();
-
-    if (msUntilExpiry <= 0) {
-      // already expired (e.g. stale token loaded from localStorage)
-      logout();
+    if(!payload?.exp){
+      logout({ skipBackend: true });
       return;
     }
 
+    const msUntilExpiry = payload.exp * 1000 - Date.now();
+    if (msUntilExpiry <= 0){
+      logout({ skipBackend: true });
+      return;
+    }
+
+    let lastFetch = Date.now();
+    const onFocus= () => {
+      // At most once in every 60s when returning to the tab
+      if (Date.now() - lastFetch > 60_000) {
+        lastFetch = Date.now();
+        refreshPermissions();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    const interval = setInterval(refreshPermissions, 2 * 60 * 1000);
     const timer = setTimeout(() => {
-      logout();
-    }, msUntilExpiry);
+      logout({ skipBackend: true });
+    }, Math.min(msUntilExpiry, 2147483647));
 
     return () => {
       window.removeEventListener("focus", onFocus);
