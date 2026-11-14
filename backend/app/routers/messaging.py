@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from typing_extensions import Annotated
 
@@ -9,12 +9,13 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, aliased
 
+from app import cache
 from app.auth.auth import ALGORITHM, SECRET_KEY
 from app.auth.permissions import IsAuthenticated, check_permission
 from app.models import ( Conversation, ConversationMember, Message, User, UserRegion, VisibilityLevel )
 from app.chat_manager import MESSAGE_TTL, manager
 from app.database import get_async_session, AsyncSessionLocal
-from app.schemas import ChatUserOut, MessageOut, ConversationOut, OpenDirectRequest
+from app.schemas import ChatUserOut, MessageOut, ConversationOut, OpenDirectRequest, MessagePage
 from app.paginations import CursorPage
 from app.services.message_services import get_conversation_messages
 
@@ -183,13 +184,20 @@ async def open_direct_conversation(
     return await _conversation_out(session, conv, current_user.id)
 
 
-@router.get("/conversations/{conversation_id}/messages", response_model=List[MessageOut])
+@router.get("/conversations/{conversation_id}/messages", response_model=MessagePage)
 async def get_messages(
     conversation_id: int,
     session: session_dependency,
     current_user=Depends(IsAuthenticated()),
+    before: Optional[int] = Query(None, ge=1),
+    limit: int = Query(30, ge=1, le=100),
 ):
     await _require_member(session, conversation_id, current_user.id)
+
+    if before is None:
+        cached = await cache.get_first_page(conversation_id, limit)
+        if cached is not None:
+            return cached
 
     stmt = (
         select(Message)
@@ -197,8 +205,30 @@ async def get_messages(
         .order_by(Message.sent_at.desc())
         .limit(500)
     )
-    newest_first = (await session.scalars(stmt)).all()
-    return list(reversed(newest_first))  # oldest first for display
+
+    if before is not None:
+        stmt = stmt.where(Message.id < before)
+
+    fetch = cache.CACHE_SIZE if before is None else limit + 1
+    rows = (await session.scalars(stmt.limit(fetch))).all()
+
+    if before is None:
+        await cache.populate(
+            conversation_id,
+            [MessageOut.model_validate(r).model_dump(mode="json") for r in rows],
+        )
+        has_more = len(rows) > limit or len(rows) >= cache.CACHE_SIZE
+    else:
+        has_more = len(rows) > limit
+    # has_more = len(rows) > limit
+    page = list(reversed(rows[:limit]))
+    # newest_first = (await session.scalars(stmt)).all()
+    # return list(reversed(newest_first))  # oldest first for display
+    return {
+        "items": page,
+        "has_more": has_more,
+        "next_cursor": page[0].id if has_more and page else None
+    }
 
 
 @router.post("/conversations/{conversation_id}/read", status_code=status.HTTP_204_NO_CONTENT)
@@ -310,6 +340,7 @@ async def chat_websocket(websocket: WebSocket, token: str = Query(...)):
                 logger.exception("Failed to save chat message")
                 await websocket.send_json({"type": "error", "detail": "Message could not be sent"})
                 continue
+            await cache.add_message(out["message"])
             # Send to everyone in the conversation, including the sender, so all
             # of the sender's open tabs stay in sync.
             for member_id in member_ids:
