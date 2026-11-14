@@ -332,3 +332,5 @@ async def update_user_superuser_status(
         "is_superuser": user.is_superuser,
         "groups": [g.name for g in user.groups],
     }
+
+
