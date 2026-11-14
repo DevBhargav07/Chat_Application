@@ -74,19 +74,16 @@ export const createPermission = (codename, name, modelName, description) =>
     description,
   });
 
-export const updateUserBasic = (userId, username, email) => {
-  api.put(`/users/${userId}`, { username, email});
-}
+export const updateUserBasic = (userId, username, email) =>
+  api.put(`/users/${userId}`, { username, email });
 
-export const updateUserActiveStatus = (userId, isActive) => {
+export const updateUserActiveStatus = (userId, isActive) =>
   api.put(`users/${userId}/active`, { is_active: isActive });
-}
 
 export const updateUserSuperuserStatus = (userId, isSuperuser) =>
   api.put(`/users/${userId}/superuser`, { is_superuser: isSuperuser });
 
 export const getRegions = () => api.get("chat/regions");
 export const getMyVisibility = () => api.get("chat/me/visibility");
-export const updateMyVisibility = (visibility, regionIds) => {  
-  api.put("/chat/me/visibility", { visibility, region_ids: regionIds});
-}
+export const updateMyVisibility = (visibility, regionIds) =>
+  api.put("/chat/me/visibility", { visibility, region_ids: regionIds });

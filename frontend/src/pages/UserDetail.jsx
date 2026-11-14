@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, X, Check } from "lucide-react";
+import { ArrowLeft, Pencil, X, Check, ShieldCheck } from "lucide-react";
 import {
   getUserDetail,
   getAllGroups,
@@ -163,17 +163,35 @@ export default function UserDetail() {
     }
   };
 
-  if (loading) return <div className="page-content">Loading...</div>;
+  if (loading) return (
+    <div className="page-content">
+      <div className="users-loading">
+        <div className="visibility-spinner" />
+        <p>Loading user...</p>
+      </div>
+    </div>
+  );
   if (!user) return <div className="page-content">User not found.</div>;
 
   return (
     <div className="page-content profile-page">
       <button className="back-link" onClick={() => navigate(-1)}>
         <ArrowLeft size={16} />
-        Back
+        <span>Back</span>
       </button>
 
-      <h1>{isOwnPage ? "My Profile" : user.username}</h1>
+      {/* Avatar header */}
+      <div className="profile-avatar-header">
+        <div className="profile-avatar-circle">
+          {(isOwnPage ? "Me" : user.username)?.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="profile-avatar-info">
+          <h1>{isOwnPage ? "My Profile" : user.username}</h1>
+          <span className="profile-role-pill">
+            {user.is_superuser ? "Superuser" : "Member"}
+          </span>
+        </div>
+      </div>
 
       <div className="profile-section">
         <div className="profile-section-header">

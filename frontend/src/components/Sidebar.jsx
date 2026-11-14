@@ -9,14 +9,10 @@ import {
   MessageCircle,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-
-function truncateLabel(label, max = 10) {
-  if (label.length <= max) return label;
-  return label.slice(0, max) + "...";
-}
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
@@ -35,7 +31,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
   const [collapsedPref, setCollapsedPref] = useState(
     () => localStorage.getItem("sidebar_collapsed") === "true"
   );
-  // On phones the sidebar is a slide-in drawer, which always shows full labels.
+  // On phones and tablets, the sidebar is a slide-in drawer showing full labels.
   const collapsed = collapsedPref && !isMobile;
 
   const toggleCollapsed = () => {
@@ -46,7 +42,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
     });
   };
 
-  // Close the drawer after every navigation
+  // Close the drawer after every route navigation
   useEffect(() => {
     onMobileClose();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,15 +50,38 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
 
   return (
     <>
-      {isMobile && mobileOpen && <div className="sidebar-backdrop" onClick={onMobileClose} />}
+      {isMobile && mobileOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
 
       <aside
         className={`sidebar ${collapsed ? "sidebar-collapsed" : ""} ${
           isMobile && mobileOpen ? "sidebar-mobile-open" : ""
         }`}
       >
+        {/* Mobile drawer header with close button */}
+        {isMobile && (
+          <div className="sidebar-mobile-header">
+            <span className="sidebar-mobile-brand">MyApp</span>
+            <button
+              type="button"
+              className="sidebar-mobile-close-btn"
+              onClick={onMobileClose}
+              aria-label="Close menu"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        )}
+
+        {/* Desktop / Laptop collapse toggle */}
         {!isMobile && (
           <button
+            type="button"
             className="sidebar-toggle-btn"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -85,7 +104,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                 <span className="sidebar-link-icon-wrap">
                   <Icon size={18} className="sidebar-link-icon" />
                 </span>
-                {!collapsed && <span className="sidebar-link-text">{truncateLabel(label)}</span>}
+                {!collapsed && <span className="sidebar-link-text">{label}</span>}
                 {collapsed && <span className="sidebar-tooltip">{label}</span>}
               </NavLink>
             )

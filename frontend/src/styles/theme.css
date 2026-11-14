@@ -1,0 +1,43 @@
+/* ==========================================================================
+   THEME VARIABLES (Light & Dark Themes)
+   Controlled by data-theme="light" | "dark" on <html>, set in ThemeContext.
+   ========================================================================== */
+
+:root,
+:root[data-theme="light"] {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-hover: #f0f2f5;
+  --text: #1a1a1a;
+  --text-muted: #6b7280;
+  --border: #e2e4e8;
+  --accent: #16a34a;
+  --accent-hover: #15803d;
+  --accent-light: rgba(22, 163, 74, 0.1);
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #4b5563;
+  --sidebar-active-bg: rgba(22, 163, 74, 0.08);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-hover: #1c2128;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --border: #30363d;
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --accent-light: rgba(34, 197, 94, 0.12);
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --sidebar-bg: #161b22;
+  --sidebar-text: #8b949e;
+  --sidebar-active-bg: rgba(34, 197, 94, 0.12);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.5);
+}

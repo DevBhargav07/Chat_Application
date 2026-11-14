@@ -37,7 +37,7 @@ export default function Login() {
     setLoading(true);
     try {
       const response = await loginUser(formData.email, formData.password);
-      const { access_token, refresh_token, username, permissions, groups, user_id } = response.data;
+      const { access_token, refresh_token, username, permissions, groups, user_id, is_superuser } = response.data;
 
       login({
         access: access_token,
@@ -46,6 +46,7 @@ export default function Login() {
         permissions: permissions,
         groups: groups,
         user_id: user_id,
+        is_superuser: is_superuser,
       });
 
       toast.success("Logged in successfully!");
@@ -60,92 +61,75 @@ export default function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 px-4 transition-colors">
-      {/* theme toggle, top-right */}
+    <div className="auth-page">
+      {/* Theme toggle, top-right */}
       <button
         onClick={toggleTheme}
-        className="absolute top-5 right-5 rounded-full p-2 text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+        className="auth-theme-btn"
         aria-label="Toggle theme"
+        title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
       >
         {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
       </button>
 
-      {/* soft background accents */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-indigo-200/40 dark:bg-indigo-500/10 blur-3xl" />
-        <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-sky-200/40 dark:bg-sky-500/10 blur-3xl" />
-      </div>
+      {/* Background ambient accents */}
+      <div className="auth-glow-top" />
+      <div className="auth-glow-bottom" />
 
-      <form
-        onSubmit={handleSubmit}
-        className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white/80 p-8 shadow-xl shadow-slate-200/50 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none"
-      >
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Welcome back
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Sign in to continue to your account
-          </p>
+      <form onSubmit={handleSubmit} className="auth-card">
+        <div className="auth-header">
+          {/* <div className="auth-brand-badge">ChaT</div> */}
+          <h1 className="auth-title">Welcome back</h1>
+          <p className="auth-subtitle">Sign in to continue to your account</p>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Email
-            </label>
+        <div className="auth-form">
+          <div className="form-group">
+            <label className="form-label">Email</label>
             <input
               type="email"
               name="email"
+              autoComplete="email"
               placeholder="you@gmail.com"
               value={formData.email}
               onChange={handleChange}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+              className="form-input"
             />
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Password
-            </label>
-            <div className="relative">
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <div className="password-wrapper">
               <input
                 type={showPassword ? "text" : "password"}
                 name="password"
+                autoComplete="current-password"
                 placeholder="Enter your password"
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 pr-10 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
+                className="form-input"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((p) => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                className="eye-btn"
                 tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
+
+          <button type="submit" disabled={loading} className="auth-btn">
+            <LogIn size={16} />
+            {loading ? "Signing in..." : "Sign in"}
+          </button>
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <LogIn size={16} />
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-
-        {/* <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          Don't have an account?{" "}
-          <Link
-            to="/signup"
-            className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
-          >
-            Sign up
-          </Link>
+        {/* <p className="auth-footer">
+          Don't have an account?
+          <Link to="/signup">Sign up</Link>
         </p> */}
       </form>
     </div>

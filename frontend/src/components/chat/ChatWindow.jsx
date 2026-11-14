@@ -1,46 +1,20 @@
-import { useLayoutEffect, Fragment, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Clock, MessageCircle, Send } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowLeft, Check, CheckCheck, Clock, MessageCircle, Send } from "lucide-react";
 import Avatar from "./Avatar";
 import { dayLabel, formatTime } from "./chatUtils";
 
 export default function ChatWindow({
-  conversation,
-  messages,
-  loading,
-  myId,
-  canSend,
-  onSend,
-  onBack,
+  conversation, messages, loading, hasMore, loadingOlder, onLoadOlder,
+  myId, canSend, otherLastReadAt, onSend, onBack,
 }) {
   const [text, setText] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const bottomRef = useRef(null);
   const inputRef = useRef(null);
-  const lastConvId = useRef(null);
-  const listRef = useRef(null);
-  const prevScrollHeightRef = useRef(0);
-  const isPrependingRef = useRef(false);
-
-
-  const handleScroll = async () => {
-    const el = listRef.current;
-    if (!el || el.scrollTop > 80 || !hasMore || loadingOlder) return;
-
-    prevScrollHeightRef.current = el.scrollHeight;
-    isPrependingRef.current = true;
-    await loadOlder();
-  }
-
-  useLayoutEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-
-    if (isPrependingRef.current) {
-      // Keep the user's viewport anchored to the exact message they were reading
-      el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
-      isPrependingRef.current = false;
-    }
-  }, [messages]);
+  const containerRef = useRef(null);
+  const topRef = useRef(null);
+  const atBottomRef = useRef(true);
+  const prevRef = useRef({ convId: null, firstId: null, lastId: null, height: 0 });
+  const [showJump, setShowJump] = useState(false);
 
   // Re-check every 30s so messages vanish from the screen when they expire,
   // without needing a refresh.
@@ -51,13 +25,6 @@ export default function ChatWindow({
 
   const visible = (messages || []).filter((m) => new Date(m.expires_at).getTime() > now);
 
-  // Jump instantly when switching chats, scroll smoothly for new messages.
-  useEffect(() => {
-    const switched = lastConvId.current !== conversation?.id;
-    lastConvId.current = conversation?.id;
-    bottomRef.current?.scrollIntoView({ behavior: switched ? "auto" : "smooth" });
-  }, [conversation?.id, visible.length]);
-
   // New chat opened: clear the draft, and focus the box on desktop only
   // (on phones that would pop the keyboard open).
   useEffect(() => {
@@ -67,6 +34,59 @@ export default function ChatWindow({
       if (window.matchMedia("(min-width: 861px)").matches) inputRef.current.focus();
     }
   }, [conversation?.id]);
+
+  const firstId = visible[0]?.id ?? null;
+  const lastId = visible[visible.length - 1]?.id ?? null;
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const prev = prevRef.current;
+
+    if (prev.convId !== conversation?.id) {
+      // opened another chat: start at the newest message
+      atBottomRef.current = true;
+      setShowJump(false);
+      el.scrollTop = el.scrollHeight;
+    } else if (prev.firstId !== null && firstId !== null && firstId < prev.firstId) {
+      // older messages were added on top: keep what the user is reading in place
+      el.scrollTop += el.scrollHeight - prev.height;
+    } else if (lastId !== prev.lastId) {
+      // something new at the bottom
+      const newest = visible[visible.length - 1];
+      if (atBottomRef.current || newest?.sender_id === myId) {
+        el.scrollTo({ top: el.scrollHeight, behavior: prev.lastId === null ? "auto" : "smooth" });
+      } else {
+        setShowJump(true); // the user is reading history: don't yank them down
+      }
+    }
+
+    prevRef.current = { convId: conversation?.id, firstId, lastId, height: el.scrollHeight };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation?.id, firstId, lastId]);
+
+  // Load the next older page when the top of the list scrolls into view
+  useEffect(() => {
+    const root = containerRef.current;
+    const target = topRef.current;
+    if (!root || !target || !hasMore || loadingOlder) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) onLoadOlder();
+      },
+      { root, rootMargin: "200px 0px 0px 0px" }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, loadingOlder, conversation?.id]);
+
+  const handleScroll = (e) => {
+    const el = e.currentTarget;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (atBottomRef.current) setShowJump(false);
+  };
 
   if (!conversation) {
     return (
@@ -113,49 +133,76 @@ export default function ChatWindow({
         </div>
       </div>
 
-      <div className="chat-messages">
-        <div className="chat-note">
-          <Clock size={13} />
-          Messages in this chat are deleted 7 days after they are sent.
-        </div>
+      <div className="chat-messages-wrap">
+        <div className="chat-messages" ref={containerRef} onScroll={handleScroll}>
+          <div ref={topRef} className="chat-top-sentinel" />
+          {loadingOlder && <div className="chat-older-loading">Loading older messages...</div>}
 
-        {loading && visible.length === 0 && (
-          <div className="chat-note">Loading messages...</div>
-        )}
+          {!hasMore && (
+            <div className="chat-note">
+              <Clock size={13} />
+              Messages in this chat are deleted 24 hours after they are sent.
+            </div>
+          )}
 
-        {visible.map((m, i) => {
-          const prev = visible[i - 1];
-          const mine = m.sender_id === myId;
-          const newDay = !prev || dayLabel(prev.sent_at) !== dayLabel(m.sent_at);
-          const groupStart = !prev || newDay || prev.sender_id !== m.sender_id;
+          {loading && visible.length === 0 && <div className="chat-note">Loading messages...</div>}
 
-          return (
-            <Fragment key={m.id}>
-              {newDay && (
-                <div className="chat-day">
-                  <span>{dayLabel(m.sent_at)}</span>
-                </div>
-              )}
-              <div
-                className={`chat-row ${mine ? "chat-row-mine" : ""} ${
-                  groupStart ? "chat-row-start" : ""
-                }`}
-              >
+
+          {visible.map((m, i) => {
+            const prev = visible[i - 1];
+            const mine = m.sender_id === myId;
+            const newDay = !prev || dayLabel(prev.sent_at) !== dayLabel(m.sent_at);
+            const groupStart = !prev || newDay || prev.sender_id !== m.sender_id;
+
+            return (
+              <Fragment key={m.id}>
+                {newDay && (
+                  <div className="chat-day">
+                    <span>{dayLabel(m.sent_at)}</span>
+                  </div>
+                )}
                 <div
-                  className={`chat-bubble ${
-                    mine ? "chat-bubble-mine" : "chat-bubble-theirs"
+                  className={`chat-row ${mine ? "chat-row-mine" : ""} ${
+                    groupStart ? "chat-row-start" : ""
                   }`}
-                  title={`Disappears ${new Date(m.expires_at).toLocaleString()}`}
                 >
-                  <span className="chat-bubble-text">{m.content}</span>
-                  <span className="chat-time">{formatTime(m.sent_at)}</span>
+                  <div
+                    className={`chat-bubble ${
+                      mine ? "chat-bubble-mine" : "chat-bubble-theirs"
+                    }`}
+                    title={`Disappears ${new Date(m.expires_at).toLocaleString()}`}
+                  >
+                    <span className="chat-bubble-text">{m.content}</span>
+                    <span className="chat-meta">
+                      <span className="chat-time">{formatTime(m.sent_at)}</span>
+                      {mine && (
+                        otherLastReadAt && new Date(otherLastReadAt) >= new Date(m.sent_at) ? (
+                          <CheckCheck size={13} className="chat-receipt chat-receipt-read" title="Read" />
+                        ) : (
+                          <Check size={13} className="chat-receipt" title="Sent" />
+                        )
+                      )}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </Fragment>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
+              </Fragment>
+            );
+          })}
+          </div>
+          {showJump && (
+            <button
+              type="button"
+              className="chat-jump"
+              onClick={() => {
+                containerRef.current.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
+                setShowJump(false);
+              }}
+            >
+              <ArrowDown size={14} />
+              New messages
+            </button>
+          )}
+        </div>
 
       <div className="chat-composer">
         <textarea

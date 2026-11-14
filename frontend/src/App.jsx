@@ -48,7 +48,10 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Login />} />
-            {/* <Route path="/signup" element={<Register />} /> */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signin" element={<Login />} />
+            <Route path="/signup" element={<Register />} />
+            <Route path="/register" element={<Register />} />
 
             <Route
               path="/dashboard"
@@ -101,6 +104,36 @@ function App() {
                       <UserDetail />
                     </AppLayout>
                   </RequirePermissionOrSelf>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat/visibility"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <VisibilitySettings />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/visibility"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <VisibilitySettings />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/regions"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <VisibilitySettings />
+                  </AppLayout>
                 </ProtectedRoute>
               }
             />

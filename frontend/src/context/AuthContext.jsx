@@ -35,23 +35,29 @@ export function AuthProvider({ children }) {
     localStorage.getItem("user_id") || null
   );
 
+  const [isSuperuser, setIsSuperuser] = useState(
+    localStorage.getItem("is_superuser") === "true"
+  );
+
 
   const isAuthenticated = !!accessToken;
 
   // Called after a successful login
-  const login = ({ access, refresh, username: uname, permissions: perms, groups: grps, user_id }) => {
+  const login = ({ access, refresh, username: uname, permissions: perms, groups: grps, user_id, is_superuser }) => {
     localStorage.setItem("access_token", access);
     if (refresh) localStorage.setItem("refresh_token", refresh);
     if (uname) localStorage.setItem("username", uname);
     if (user_id) localStorage.setItem("user_id", user_id);
     localStorage.setItem("permissions", JSON.stringify(perms || []));
     localStorage.setItem("groups", JSON.stringify(grps || []));
+    localStorage.setItem("is_superuser", String(!!is_superuser));
 
     setAccessToken(access);
     setUsername(uname || "");
     setUserId(user_id || null);
     setPermissions(perms || []);
     setGroups(grps || []);
+    setIsSuperuser(!!is_superuser);
   }
 
   // Called on logout, or when a refresh attempt fails
@@ -61,10 +67,12 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("username");
     localStorage.removeItem("permissions");
     localStorage.removeItem("groups");
+    localStorage.removeItem("is_superuser");
     setAccessToken(null);
     setUsername("");
     setPermissions([]);
     setGroups([]);
+    setIsSuperuser(false);
   };
 
   // Re-fetches the current user's permissions/groups from the backend
@@ -78,11 +86,14 @@ export function AuthProvider({ children }) {
       const response = await getMyProfile();
       const perms = response.data.permissions || [];
       const grps = response.data.groups || [];
+      const superuser = !!response.data.is_superuser;
 
       localStorage.setItem("permissions", JSON.stringify(perms));
       localStorage.setItem("groups", JSON.stringify(grps));
+      localStorage.setItem("is_superuser", String(superuser));
       setPermissions(perms);
       setGroups(grps);
+      setIsSuperuser(superuser);
     } catch {
       // Silently ignore — if this fails, the user just keeps their
       // last-known permissions until the next successful refresh.
@@ -134,6 +145,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       window.removeEventListener("focus", onFocus);
+      clearInterval(interval); // stop periodic refresh
       clearTimeout(timer); // cleanup if token changes/unmounts
     }
       
@@ -144,8 +156,10 @@ export function AuthProvider({ children }) {
       value={{
         accessToken,
         username,
+        userId,
         permissions,
         groups,
+        isSuperuser,
         isAuthenticated,
         login,
         logout,

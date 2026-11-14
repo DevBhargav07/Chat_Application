@@ -1,0 +1,241 @@
+/* ==========================================================================
+   RESPONSIVE LAYOUT & MEDIA QUERIES (Mobile, Tablet / iPad, Laptop / Desktop)
+   ========================================================================== */
+
+/* ==========================================================================
+   TABLET & IPAD (max-width: 1024px)
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .page-content {
+    margin: 16px;
+    padding: 20px 24px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+
+  .chat-shell {
+    grid-template-columns: 290px minmax(0, 1fr);
+    margin: 12px;
+  }
+
+  .visibility-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .regions-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}
+/* ==========================================================================
+   MOBILE & SMALL TABLETS (max-width: 860px)
+   ========================================================================== */
+@media (max-width: 860px) {
+  /* Prevent iOS zoom on input focus */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Topbar adjustments */
+  .topbar {
+    padding: 0 14px;
+  }
+
+  .topbar-menu-btn {
+    display: inline-flex;
+  }
+
+  /* Sidebar becomes a full-height slide-in drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 270px;
+    height: 100vh;
+    height: 100dvh;
+    padding: 16px 14px;
+    z-index: 60;
+    background: var(--surface);
+    box-shadow: none;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-mobile-open {
+    transform: translateX(0);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .sidebar-toggle-btn {
+    display: none;
+  }
+
+  .sidebar-mobile-header {
+    display: flex;
+  }
+
+  /* Main content padding */
+  .page-content {
+    margin: 10px;
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  .dashboard-hero {
+    padding: 18px 16px;
+  }
+
+  .dashboard-hero h1 {
+    font-size: 20px;
+  }
+
+  /* Chat Immersive Mode on Mobile: one pane at a time */
+  .chat-shell {
+    grid-template-columns: 1fr;
+    margin: 0;
+    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .chat-window {
+    display: none;
+  }
+
+  .chat-shell-open .chat-list {
+    display: none;
+  }
+
+  .chat-shell-open .chat-window {
+    display: flex;
+  }
+
+  .chat-back-btn {
+    display: inline-flex;
+  }
+
+  .chat-composer {
+    padding: 10px 12px;
+  }
+
+  /* Visibility Page Mobile */
+  .visibility-header-left {
+    width: 100%;
+  }
+
+  .visibility-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .visibility-actions-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .visibility-actions-right {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .visibility-actions-right button {
+    flex: 1;
+  }
+
+  .regions-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .regions-search-wrap {
+    min-width: 100%;
+  }
+
+  .regions-count-pill {
+    align-self: flex-start;
+  }
+
+  /* Users Table Container */
+  .users-table-container {
+    border-radius: 8px;
+  }
+
+  .users-table th,
+  .users-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .modal-overlay {
+    padding: 14px;
+  }
+
+  .modal-card {
+    padding: 18px 16px;
+  }
+}
+
+/* ==========================================================================
+   EXTRA-SMALL MOBILE SCREENS (max-width: 520px)
+   ========================================================================== */
+@media (max-width: 520px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .regions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .users-table th:nth-child(4),
+  .users-table td:nth-child(4) {
+    display: none; /* Hide date on very narrow phones to preserve spacing */
+  }
+
+  .topbar-brand {
+    font-size: 15px;
+  }
+
+  .notfound-page h1,
+  .forbidden-page h1 {
+    font-size: 48px;
+  }
+
+  .page-content {
+    margin: 8px;
+    padding: 14px;
+    border-radius: 8px;
+  }
+
+  .dashboard-card {
+    padding: 16px;
+  }
+
+  .dashboard-hero {
+    padding: 16px;
+  }
+
+  .dashboard-hero h1 {
+    font-size: 18px;
+  }
+
+  .profile-page {
+    gap: 14px;
+  }
+
+  .profile-section {
+    padding: 14px;
+  }
+
+  .admin-form-row {
+    grid-template-columns: 1fr;
+  }
+}

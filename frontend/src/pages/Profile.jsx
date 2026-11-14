@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getMyProfile } from "../api/auth";
 import { FormatDate } from "../components/FormatDate";
+import { ShieldCheck } from "lucide-react";
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);
@@ -21,14 +22,47 @@ export default function Profile() {
     fetchProfile();
   }, []);
 
-  if (loading) return <div className="page-content">Loading profile...</div>;
-  if (!profile) return <div className="page-content">Could not load profile.</div>;
+  if (loading)
+    return (
+      <div className="page-content">
+        <div className="users-loading">
+          <div className="visibility-spinner" />
+          <p>Loading profile...</p>
+        </div>
+      </div>
+    );
+
+  if (!profile)
+    return (
+      <div className="page-content">
+        <p style={{ color: "var(--text-muted)" }}>Could not load profile.</p>
+      </div>
+    );
+
+  const initials = profile.username?.slice(0, 2).toUpperCase() || "U";
 
   return (
     <div className="page-content profile-page">
-      <h1>My Profile</h1>
+      {/* Avatar header */}
+      <div className="profile-avatar-header">
+        <div className="profile-avatar-circle">{initials}</div>
+        <div className="profile-avatar-info">
+          <h1>{profile.username}</h1>
+          <span className="profile-role-pill">
+            {profile.is_superuser ? (
+              <>
+                <ShieldCheck size={12} />
+                Superuser
+              </>
+            ) : (
+              "Member"
+            )}
+          </span>
+        </div>
+      </div>
 
       <div className="profile-section">
+        <h2>Account Details</h2>
         <div className="profile-row">
           <span className="profile-label">Username</span>
           <span className="profile-value">{profile.username}</span>

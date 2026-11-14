@@ -24,6 +24,13 @@ function getMyIdFromToken() {
   }
 }
 
+// Combines two lists of messages without duplications, oldest first.
+function mergeMessages(a, b){
+  const byId = new Map();
+  [...a, ...b].forEach((m) => byId.set(m.id, m));
+  return [...byId.values()].sort((x, y) => x.id - y.id);
+}
+
 export default function Chat() {
   const { userId } = useAuth();
   const myId = Number(userId) || getMyIdFromToken();
@@ -38,12 +45,16 @@ export default function Chat() {
   // re-create (and re-subscribe) on every render.
   const conversationsRef = useRef([]);
   const activeIdRef = useRef(null);
+  const messagesRef = useRef({});
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+  useEffect(() => {
+    messagesRef.current = messagesByConv;
+  }, [messagesByConv]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -57,11 +68,65 @@ export default function Chat() {
   const loadMessages = useCallback(async (conversationId) => {
     try {
       const res = await getMessages(conversationId);
-      setMessagesByConv((prev) => ({ ...prev, [conversationId]: res.data }));
+      const { items, has_more, next_cursor } = res.data;
+
+      setMessagesByConv((prev) => {
+        const existing = prev[conversationId];
+        if (!existing) {
+          return {
+            ...prev,
+            [conversationId]: { items, hasMore: has_more, cursor: next_cursor, loadingOlder: false },
+          };
+        }
+        // Re-sync (reconnect, reopening a chat): keep older pages the user already loaded.
+        const loadedFurtherBack =
+          existing.items.length > 0 && existing.items[0].id < (items[0]?.id ?? Infinity);
+        return {
+          ...prev,
+          [conversationId]: {
+            items: mergeMessages(existing.items, items),
+            hasMore: loadedFurtherBack ? existing.hasMore : has_more,
+            cursor: loadedFurtherBack ? existing.cursor : next_cursor,
+            loadingOlder: false,
+          },
+        };
+      });
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to load messages"));
-      // Stop the "Loading..." state so the chat is still usable
-      setMessagesByConv((prev) => (prev[conversationId] ? prev : { ...prev, [conversationId]: [] }));
+      setMessagesByConv((prev) =>
+        prev[conversationId]
+          ? prev
+          : { ...prev, [conversationId]: { items: [], hasMore: false, cursor: null, loadingOlder: false } }
+      );
+    }
+  }, []);
+  const loadOlder = useCallback(async (conversationId) => {
+  const thread = messagesRef.current[conversationId];
+  if (!thread || !thread.hasMore || thread.loadingOlder) return;
+
+  setMessagesByConv((prev) => ({
+      ...prev,
+      [conversationId]: { ...prev[conversationId], loadingOlder: true },
+    }));
+
+    try {
+      const res = await getMessages(conversationId, { before: thread.cursor });
+      const { items, has_more, next_cursor } = res.data;
+      setMessagesByConv((prev) => ({
+        ...prev,
+        [conversationId]: {
+          items: mergeMessages(items, prev[conversationId].items),
+          hasMore: has_more,
+          cursor: next_cursor,
+          loadingOlder: false,
+        },
+      }));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to load older messages"));
+      setMessagesByConv((prev) => ({
+        ...prev,
+        [conversationId]: { ...prev[conversationId], loadingOlder: false },
+      }));
     }
   }, []);
 
@@ -109,12 +174,11 @@ export default function Chat() {
 
       // Add to the open message list (skip duplicates)
       setMessagesByConv((prev) => {
-        const existing = prev[convId];
-        // Not loaded and not open: skip it, the history fetch will include it.
-        if (!existing && activeIdRef.current !== convId) return prev;
-        const list = existing || [];
-        if (list.some((m) => m.id === msg.id)) return prev;
-        return { ...prev, [convId]: [...list, msg] };
+        const thread = prev[convId];
+        if (!thread && activeIdRef.current !== convId) return prev;
+        const base = thread || { items: [], hasMore: false, cursor: null, loadingOlder: false };
+        if (base.items.some((m) => m.id === msg.id)) return prev;
+        return { ...prev, [convId]: { ...base, items: [...base.items, msg] } };
       });
 
       // Someone started a brand-new chat with us: fetch it.
@@ -201,6 +265,7 @@ export default function Chat() {
   };
 
   const activeConversation = conversations.find((c) => c.id === activeId) || null;
+  const activeThread = activeId ? messagesByConv[activeId] : null;
 
   return (
     <div className={`chat-shell ${activeId ? "chat-shell-open" : ""}`}>
@@ -215,10 +280,14 @@ export default function Chat() {
       />
       <ChatWindow
         conversation={activeConversation}
-        messages={activeId ? messagesByConv[activeId] : []}
-        loading={activeId ? messagesByConv[activeId] === undefined : false}
+        messages={activeThread ? activeThread.items : []}
+        loading={activeId ? !activeThread : false}
+        hasMore={activeThread?.hasMore ?? false}
+        loadingOlder={activeThread?.loadingOlder ?? false}
+        onLoadOlder={() => loadOlder(activeId)}
         myId={myId}
         canSend={status === "open"}
+        otherLastReadAt={activeConversation?.other_last_read_at}
         onSend={handleSend}
         onBack={() => setActiveId(null)}
       />
