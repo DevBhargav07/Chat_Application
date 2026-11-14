@@ -93,10 +93,15 @@ async def get_first_page(conversation_id: int, limit: int) -> Optional[dict]:
 
     has_more = len(items) > limit or len(items) >= CACHE_SIZE
     page = list(reversed(items[:limit]))               # oldest first, like the database path
+    next_cursor = page[0]["id"] if has_more and page else None
+    # from app.paginations import encode_cursor
+    # sent_at_dt = datetime.fromisoformat(page[0]["sent_at"].replace("Z", "+00:00")) if page else None
+    # next_cursor = encode_cursor(sent_at_dt, page[0]["id"]) if has_more and page else None
+
     return {
         "items": page,
         "has_more": has_more,
-        "next_cursor": page[0]["id"] if has_more else None,
+        "next_cursor": next_cursor,
     }
 
 
@@ -130,32 +135,112 @@ async def add_message(message: dict) -> None:
     except Exception:
         _pause("write failed")
 
-USER_CACHE_TTL = 300 # 5 minutes
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import User
-from sqlalchemy import select
+USER_CACHE_TTL = 300       # 5 minutes
+PROFILE_CACHE_TTL = 300    # 5 minutes
+REVOKE_TTL = 86400         # 24 hours (covers token expiry)
 
-async def get_user_cache_or_db(user_id: int, redis, db: AsyncSession):
-    cache_key = f"user:{user_id}"
 
-    # try fetch from cache first
-    cached = await redis.get(cache_key)
-    if cached:
-        return json.loads(cached)
-
-    # cache missed: calling db
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
+async def get_user_cached(user_id: int) -> Optional[dict]:
+    """Retrieve user basic info from Redis cache if available."""
+    if not _usable():
+        return None
+    try:
+        raw = await _redis.get(f"user:{user_id}")
+        return json.loads(raw) if raw else None
+    except Exception:
+        _pause("get_user_cached failed")
         return None
 
-    # serialize user data
-    user_data = {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "is_active": user.is_active,
-        "is_superuser": user.is_superuser
-    }
-    await redis.set(cache_key, json.dumps(user_data), ex=USER_CACHE_TTL)
-    return user_data
+
+async def set_user_cached(user_id: int, user_data: dict, ttl: int = USER_CACHE_TTL) -> None:
+    """Store user basic info in Redis with TTL."""
+    if not _usable() or not user_data:
+        return
+    try:
+        await _redis.set(f"user:{user_id}", json.dumps(user_data), ex=ttl)
+    except Exception:
+        _pause("set_user_cached failed")
+
+
+async def invalidate_user(user_id: int) -> None:
+    """Delete user cache from Redis."""
+    if not _usable():
+        return
+    try:
+        await _redis.delete(f"user:{user_id}")
+    except Exception:
+        _pause("invalidate_user failed")
+
+
+async def revoke_user(user_id: int, ttl: int = REVOKE_TTL) -> None:
+    """Mark a user as revoked/logged out across all sessions/tabs."""
+    if not _usable():
+        return
+    try:
+        pipe = _redis.pipeline()
+        pipe.set(f"revoked_user:{user_id}", "1", ex=ttl)
+        pipe.delete(f"user:{user_id}")
+        pipe.delete(f"user:{user_id}:profile")
+        await pipe.execute()
+    except Exception:
+        _pause("revoke_user failed")
+
+
+async def unrevoke_user(user_id: int) -> None:
+    """Clear revocation when user is reactivated or re-logs in."""
+    if not _usable():
+        return
+    try:
+        await _redis.delete(f"revoked_user:{user_id}")
+    except Exception:
+        _pause("unrevoke_user failed")
+
+
+async def is_user_revoked(user_id: int) -> bool:
+    """Check if the user session has been revoked."""
+    if not _usable():
+        return False
+    try:
+        return bool(await _redis.exists(f"revoked_user:{user_id}"))
+    except Exception:
+        _pause("is_user_revoked failed")
+        return False
+
+
+async def get_profile_cached(user_id: int) -> Optional[dict]:
+    """Retrieve user profile (groups & permissions) from Redis."""
+    if not _usable():
+        return None
+    try:
+        raw = await _redis.get(f"user:{user_id}:profile")
+        return json.loads(raw) if raw else None
+    except Exception:
+        _pause("get_profile_cached failed")
+        return None
+
+
+async def set_profile_cached(user_id: int, profile_data: dict, ttl: int = PROFILE_CACHE_TTL) -> None:
+    """Cache user profile in Redis."""
+    if not _usable() or not profile_data:
+        return
+    try:
+        # Custom serializer handles datetime fields (e.g. created_at)
+        def _default_serializer(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+        payload = json.dumps(profile_data, default=_default_serializer)
+        await _redis.set(f"user:{user_id}:profile", payload, ex=ttl)
+    except Exception:
+        _pause("set_profile_cached failed")
+
+
+async def invalidate_profile_cache(user_id: int) -> None:
+    """Invalidate profile cache when permissions/groups change."""
+    if not _usable():
+        return
+    try:
+        await _redis.delete(f"user:{user_id}:profile")
+    except Exception:
+        _pause("invalidate_profile_cache failed")
