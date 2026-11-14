@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_async_session
 from app.models import User, Group, Permission
+from app import cache
 from app.schemas import (
     UserOut, ProfileResponse, GroupOut, UpdateUserGroups, UserDetailOut, PermissionOut, CreatePermission,
     GroupDetailOut, CreateGroup, UpdateUserBasic, UpdateActiveStatus, UpdateSuperuserStatus
@@ -27,6 +28,12 @@ async def get_my_profile(
     session: session_dependency,
     current_user: User = Depends(IsAuthenticated()),
 ):
+    # 1. Fast cache hit from Redis
+    cached_profile = await cache.get_profile_cached(current_user.id)
+    if cached_profile:
+        return cached_profile
+
+    # 2. Cache miss: load from database
     stmt = (
         select(User)
         .options(selectinload(User.groups).selectinload(Group.permissions))
@@ -36,7 +43,7 @@ async def get_my_profile(
     groups = [g.name for g in user.groups]
     permissions = sorted({p.codename for g in user.groups for p in g.permissions})
 
-    return {
+    profile_data = {
         "id": user.id,
         "username": user.username,
         "email": user.email,
@@ -45,6 +52,10 @@ async def get_my_profile(
         "groups": groups,
         "permissions": permissions,
     }
+
+    # 3. Warm the Redis cache
+    await cache.set_profile_cached(user.id, profile_data)
+    return profile_data
 
 @router.get("/", response_model=List[UserOut])
 async def get_users(session: session_dependency, _: User = Depends(IsAuthenticated())):
@@ -207,6 +218,9 @@ async def update_user_groups(
     await session.commit()
     await session.refresh(user)
 
+    # Invalidate profile cache so permissions & groups update immediately
+    await cache.invalidate_profile_cache(user_id)
+
     return user
 
 #----------------------- Update User ----------------------------------
@@ -250,6 +264,10 @@ async def update_user_basic(
     user.email = email
     await session.commit()
 
+    # Invalidate user caches
+    await cache.invalidate_user(user_id)
+    await cache.invalidate_profile_cache(user_id)
+
     groups_stmt = select(User).options(selectinload(User.groups)).where(User.id == user_id)
     user = await session.scalar(groups_stmt)
 
@@ -285,6 +303,14 @@ async def update_user_active_status(
     await session.commit()
     await session.refresh(user)
 
+    # Invalidate caches & revoke active sessions if deactivated
+    await cache.invalidate_user(user_id)
+    await cache.invalidate_profile_cache(user_id)
+    if not payload.is_active:
+        await cache.revoke_user(user_id)
+    else:
+        await cache.unrevoke_user(user_id)
+
     groups_stmt = select(User).options(selectinload(User.groups)).where(User.id == user_id)
     user = await session.scalar(groups_stmt)
 
@@ -319,6 +345,10 @@ async def update_user_superuser_status(
     user.is_superuser = payload.is_superuser
     await session.commit()
     await session.refresh(user)
+
+    # Invalidate caches
+    await cache.invalidate_user(user_id)
+    await cache.invalidate_profile_cache(user_id)
 
     groups_stmt = select(User).options(selectinload(User.groups)).where(User.id == user_id)
     user = await session.scalar(groups_stmt)
