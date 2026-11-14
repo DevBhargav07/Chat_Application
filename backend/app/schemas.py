@@ -128,6 +128,11 @@ class MessageOut(BaseModel):
     class Config:
         from_attributes = True
 
+class MessagePage(BaseModel):
+    items: List[MessageOut]
+    has_more: bool = False
+    next_cursor: Optional[int] = None
+
 class ConversationOut(BaseModel):
     id: int
     type: str
