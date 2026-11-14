@@ -183,4 +183,5 @@ class Message(Base):
             "id",
         ),
         Index("ix_messages_expires_at", "expires_at"),
+        Index("ix_messages_converstation_id_id", "conversation_id", "id"),
     )
